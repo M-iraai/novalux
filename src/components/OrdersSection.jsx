@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   ChevronDown, Trash2, Plus, Search,
-  ShoppingCart, X, Pencil, Phone, MapPin, Ruler, ImageIcon
+  ShoppingCart, X, Pencil, Phone, MapPin, Ruler, ImageIcon, Download
 } from 'lucide-react'
 import BottomSheet from './BottomSheet'
 import LazyImage from './LazyImage'
@@ -51,6 +51,38 @@ function formatDateFull(date) {
 
 function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null) return null
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function getImageFileSize(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD' })
+    const len = res.headers.get('content-length')
+    return len ? parseInt(len, 10) : null
+  } catch { return null }
+}
+
+async function downloadImage(url, filename) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename || 'image'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    console.error('Download failed:', err)
+  }
 }
 
 async function uploadToR2(file) {
@@ -114,6 +146,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const [showCount, setShowCount] = useState(20)
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', confirmText: 'حذف', onConfirm: null })
   const [deleting, setDeleting] = useState(false)
+  const [imageSizes, setImageSizes] = useState({})
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   const filteredOrders = useMemo(() => {
@@ -127,6 +160,22 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
 
   const allDayGroups = useMemo(() => groupOrdersByDay(filteredOrders), [filteredOrders])
   const dayGroups = useMemo(() => allDayGroups.slice(0, showCount), [allDayGroups, showCount])
+
+  // Fetch image file sizes for visible orders
+  useMemo(() => {
+    dayGroups.forEach(group => {
+      group.orders.forEach(order => {
+        if (order.image_url && !imageSizes[order.id]) {
+          const url = getImageUrl(order.image_url)
+          if (url && !url.startsWith('blob:')) {
+            getImageFileSize(url).then(size => {
+              if (size != null) setImageSizes(prev => ({ ...prev, [order.id]: size }))
+            })
+          }
+        }
+      })
+    })
+  }, [dayGroups])
 
   const toggleDay = (key) => {
     setOpenDays(prev => ({ ...prev, [key]: !prev[key] }))
@@ -349,16 +398,35 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                     className="bg-white border border-border rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow"
                   >
                     <div className="flex gap-3">
-                      {/* Image */}
-                      <LazyImage
-                        src={order.image_url ? getImageUrl(order.image_url) : null}
-                        className="w-[72px] h-[72px] shrink-0 rounded-xl border border-border6"
-                        fallback={
-                          <div className="w-full h-full flex items-center justify-center text-muted bg-soft">
-                            <ImageIcon size={24} strokeWidth={1.5} />
-                          </div>
-                        }
-                      />
+                      {/* Image with download */}
+                      <div className="relative w-[72px] h-[72px] shrink-0">
+                        <LazyImage
+                          src={order.image_url ? getImageUrl(order.image_url) : null}
+                          className="w-full h-full rounded-xl border border-border6"
+                          fallback={
+                            <div className="w-full h-full flex items-center justify-center text-muted bg-soft">
+                              <ImageIcon size={24} strokeWidth={1.5} />
+                            </div>
+                          }
+                        />
+                        {order.image_url && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              downloadImage(getImageUrl(order.image_url), order.image_url.split('/').pop())
+                            }}
+                            className="absolute bottom-1 left-1 w-5 h-5 rounded-md bg-black/60 text-white grid place-items-center border-0 hover:bg-black/80 transition-colors"
+                            title="تحميل الصورة"
+                          >
+                            <Download size={11} />
+                          </button>
+                        )}
+                        {order.image_url && imageSizes[order.id] != null && (
+                          <span className="absolute top-1 left-1 bg-black/60 text-white text-[8px] font-bold px-1 py-0.5 rounded leading-none">
+                            {formatFileSize(imageSizes[order.id])}
+                          </span>
+                        )}
+                      </div>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
