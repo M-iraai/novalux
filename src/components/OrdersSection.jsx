@@ -116,25 +116,15 @@ async function downloadImage(url, filename, sizeBytes) {
     ctx.textBaseline = 'middle'
     ctx.fillText(label, x + padding, y + boxH / 2)
 
-    canvas.toBlob((outBlob) => {
-      if (!outBlob) {
-        // Fallback: download without text overlay
-        const a = document.createElement('a')
-        a.href = blobUrl
-        a.download = filename || 'image'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-      } else {
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(outBlob)
-        a.download = filename || 'image'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(blobUrl)
-      }
-    }, 'image/png')
+    // Use toDataURL (more reliable than toBlob across browsers)
+    const dataUrl = canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = filename || 'image.png'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
   } catch (err) {
     console.error('Download failed:', err)
   }
