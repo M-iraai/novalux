@@ -361,9 +361,9 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                         </div>
 
                         {order.address && (
-                          <div className="flex items-center gap-1.5 mt-0.5 text-meta2 text-xs">
-                            <MapPin size={11} />
-                            <span className="truncate">{order.address}</span>
+                          <div className="flex items-start gap-1.5 mt-0.5 text-meta2 text-xs">
+                            <MapPin size={11} className="mt-0.5 shrink-0" />
+                            <span className="break-words">{order.address}</span>
                           </div>
                         )}
 

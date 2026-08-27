@@ -21,6 +21,7 @@ export default function Dashboard({ session, onLogout }) {
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
     if (data) setOrders(data)
   }
 
