@@ -68,18 +68,56 @@ async function getImageFileSize(url) {
   } catch { return null }
 }
 
-async function downloadImage(url, filename) {
+async function downloadImage(url, filename, sizeBytes) {
   try {
     const res = await fetch(url)
     const blob = await res.blob()
     const blobUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = blobUrl
-    a.download = filename || 'image'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(blobUrl)
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = blobUrl
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+
+    // Draw size text on the image
+    if (sizeBytes != null) {
+      const label = formatFileSize(sizeBytes)
+      const fontSize = Math.max(14, Math.round(img.naturalWidth / 25))
+      ctx.font = `bold ${fontSize}px sans-serif`
+      const padding = fontSize * 0.5
+      const tw = ctx.measureText(label).width
+      const boxW = tw + padding * 2
+      const boxH = fontSize + padding * 2
+      const x = img.naturalWidth - boxW - fontSize * 0.5
+      const y = img.naturalHeight - boxH - fontSize * 0.5
+
+      // Background pill
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'
+      ctx.beginPath()
+      ctx.roundRect(x, y, boxW, boxH, boxH / 2)
+      ctx.fill()
+
+      // Text
+      ctx.fillStyle = '#ffffff'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label, x + padding, y + boxH / 2)
+    }
+
+    canvas.toBlob((outBlob) => {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(outBlob)
+      a.download = filename || 'image'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    }, 'image/png')
   } catch (err) {
     console.error('Download failed:', err)
   }
@@ -413,7 +451,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              downloadImage(getImageUrl(order.image_url), order.image_url.split('/').pop())
+                              downloadImage(getImageUrl(order.image_url), order.image_url.split('/').pop(), imageSizes[order.id])
                             }}
                             className="absolute bottom-1 left-1 w-5 h-5 rounded-md bg-black/60 text-white grid place-items-center border-0 hover:bg-black/80 transition-colors"
                             title="تحميل الصورة"
