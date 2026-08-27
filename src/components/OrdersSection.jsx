@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import BottomSheet from './BottomSheet'
 import LazyImage from './LazyImage'
+import ConfirmDialog from './ConfirmDialog'
 import { useDebounce } from '../hooks/useDebounce'
 
 // image_url in DB is the R2 key (e.g. products/123-abc.png)
@@ -107,6 +108,8 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const [searchQuery, setSearchQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [showCount, setShowCount] = useState(20)
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', confirmText: 'حذف', onConfirm: null })
+  const [deleting, setDeleting] = useState(false)
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   const filteredOrders = useMemo(() => {
@@ -230,23 +233,43 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
     setSaving(false)
   }
 
-  const handleDeleteOrder = async (order) => {
-    if (!confirm(`هل تريد حذف طلب "${order.customer_name}"؟`)) return
-    if (order.image_url) await deleteFromR2(order.image_url)
-    const { error } = await supabase.from('orders').delete().eq('id', order.id)
-    if (!error) { showToast('تم حذف الطلب'); onRefresh() }
+  const handleDeleteOrder = (order) => {
+    setConfirmDialog({
+      open: true,
+      title: 'حذف الطلب',
+      message: `هل تريد حذف طلب "${order.customer_name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+      confirmText: 'حذف',
+      onConfirm: async () => {
+        setDeleting(true)
+        if (order.image_url) await deleteFromR2(order.image_url)
+        const { error } = await supabase.from('orders').delete().eq('id', order.id)
+        setDeleting(false)
+        setConfirmDialog(prev => ({ ...prev, open: false }))
+        if (!error) { showToast('تم حذف الطلب'); onRefresh() }
+      },
+    })
   }
 
-  const handleDeleteDay = async (dayDate, ordersList) => {
+  const handleDeleteDay = (dayDate, ordersList) => {
     if (!isOlderThan7Days(dayDate)) {
       showToast('يمكنك حذف الطلبات التي مضى عليها 7 أيام فقط')
       return
     }
-    if (!confirm(`هل تريد حذف جميع طلبات ${getDayLabel(dayDate)}؟`)) return
-    for (const o of ordersList) { if (o.image_url) await deleteFromR2(o.image_url) }
-    const ids = ordersList.map(o => o.id)
-    const { error } = await supabase.from('orders').delete().in('id', ids)
-    if (!error) { showToast(`تم حذف ${ids.length} طلب`); onRefresh() }
+    setConfirmDialog({
+      open: true,
+      title: `حذف طلبات ${getDayLabel(dayDate)}`,
+      message: `هل تريد حذف جميع طلبات ${getDayLabel(dayDate)} (${ordersList.length} طلب)؟ لا يمكن التراجع عن هذا الإجراء.`,
+      confirmText: `حذف ${ordersList.length} طلب`,
+      onConfirm: async () => {
+        setDeleting(true)
+        for (const o of ordersList) { if (o.image_url) await deleteFromR2(o.image_url) }
+        const ids = ordersList.map(o => o.id)
+        const { error } = await supabase.from('orders').delete().in('id', ids)
+        setDeleting(false)
+        setConfirmDialog(prev => ({ ...prev, open: false }))
+        if (!error) { showToast(`تم حذف ${ids.length} طلب`); onRefresh() }
+      },
+    })
   }
 
   return (
@@ -533,6 +556,17 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
           </button>
         </form>
       </BottomSheet>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.open}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        loading={deleting}
+      />
     </div>
   )
 }
