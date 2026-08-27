@@ -13,10 +13,12 @@ const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL
 
 function getImageUrl(storedValue) {
   if (!storedValue) return null
-  // Already a full URL
+  // Already a full URL (old images or direct R2 URLs)
   if (storedValue.startsWith('http')) return storedValue
-  // R2 key → public URL
-  return `${R2_PUBLIC_URL}/${storedValue}`
+  // R2 key → construct public URL
+  if (R2_PUBLIC_URL) return `${R2_PUBLIC_URL}/${storedValue}`
+  // Fallback: return the key as-is (won't load, but won't crash)
+  return storedValue
 }
 
 function groupOrdersByDay(orders) {
@@ -54,23 +56,18 @@ function formatTime(date) {
 }
 
 async function uploadToR2(file) {
-  // Step 1: Get presigned URL from Vercel serverless function
-  const presignRes = await fetch('/api/upload', {
+  // Upload file through Vercel serverless function (no CORS issues)
+  const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: file.name, contentType: file.type }),
-  })
-  const { presignedUrl, key } = await presignRes.json()
-  if (!presignRes.ok) throw new Error('Failed to get upload URL')
-
-  // Step 2: Upload directly to R2
-  const uploadRes = await fetch(presignedUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': file.name,
+    },
     body: file,
   })
-  if (!uploadRes.ok) throw new Error('Failed to upload to R2')
-  return key
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Failed to upload to R2')
+  return data.key
 }
 
 async function deleteFromR2(storedValue) {
