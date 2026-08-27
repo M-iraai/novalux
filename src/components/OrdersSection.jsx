@@ -9,16 +9,12 @@ import LazyImage from './LazyImage'
 import { useDebounce } from '../hooks/useDebounce'
 
 // image_url in DB is the R2 key (e.g. products/123-abc.png)
-const R2_PUBLIC_URL = import.meta.env.VITE_R2_PUBLIC_URL
-
 function getImageUrl(storedValue) {
   if (!storedValue) return null
   // Already a full URL (old images or direct R2 URLs)
   if (storedValue.startsWith('http')) return storedValue
-  // R2 key → construct public URL
-  if (R2_PUBLIC_URL) return `${R2_PUBLIC_URL}/${storedValue}`
-  // Fallback: return the key as-is (won't load, but won't crash)
-  return storedValue
+  // R2 key → use API proxy (works on both localhost and Vercel)
+  return `/api/image?key=${encodeURIComponent(storedValue)}`
 }
 
 function groupOrdersByDay(orders) {
