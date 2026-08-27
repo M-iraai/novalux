@@ -72,10 +72,10 @@ async function downloadImage(url, filename, sizeBytes) {
   try {
     const res = await fetch(url)
     const blob = await res.blob()
+    const blobSize = sizeBytes || blob.size
     const blobUrl = URL.createObjectURL(blob)
 
     const img = new Image()
-    img.crossOrigin = 'anonymous'
     img.src = blobUrl
     await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject })
 
@@ -86,46 +86,54 @@ async function downloadImage(url, filename, sizeBytes) {
     ctx.drawImage(img, 0, 0)
 
     // Draw size text on the image
-    if (sizeBytes != null) {
-      const label = formatFileSize(sizeBytes)
-      const fontSize = Math.max(14, Math.round(img.naturalWidth / 25))
-      ctx.font = `bold ${fontSize}px sans-serif`
-      const padding = fontSize * 0.5
-      const tw = ctx.measureText(label).width
-      const boxW = tw + padding * 2
-      const boxH = fontSize + padding * 2
-      const x = img.naturalWidth - boxW - fontSize * 0.5
-      const y = img.naturalHeight - boxH - fontSize * 0.5
+    const label = formatFileSize(blobSize)
+    const fontSize = Math.max(14, Math.round(img.naturalWidth / 25))
+    const padding = fontSize * 0.6
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`
+    const tw = ctx.measureText(label).width
+    const boxW = tw + padding * 2
+    const boxH = fontSize + padding * 2
+    const x = img.naturalWidth - boxW - fontSize * 0.5
+    const y = img.naturalHeight - boxH - fontSize * 0.5
+    const cr = boxH / 2
 
-      // Background pill (manual rounded rect for compatibility)
-      ctx.fillStyle = 'rgba(0,0,0,0.65)'
-      const r = boxH / 2
-      ctx.beginPath()
-      ctx.moveTo(x + r, y)
-      ctx.lineTo(x + boxW - r, y)
-      ctx.arcTo(x + boxW, y, x + boxW, y + r, r)
-      ctx.arcTo(x + boxW, y + boxH, x + boxW - r, y + boxH, r)
-      ctx.lineTo(x + r, y + boxH)
-      ctx.arcTo(x, y + boxH, x, y + boxH - r, r)
-      ctx.arcTo(x, y, x + r, y, r)
-      ctx.closePath()
-      ctx.fill()
+    // Background pill (manual rounded rect)
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'
+    ctx.beginPath()
+    ctx.moveTo(x + cr, y)
+    ctx.lineTo(x + boxW - cr, y)
+    ctx.arcTo(x + boxW, y, x + boxW, y + cr, cr)
+    ctx.arcTo(x + boxW, y + boxH, x + boxW - cr, y + boxH, cr)
+    ctx.lineTo(x + cr, y + boxH)
+    ctx.arcTo(x, y + boxH, x, y + boxH - cr, cr)
+    ctx.arcTo(x, y, x + cr, y, cr)
+    ctx.closePath()
+    ctx.fill()
 
-      // Text
-      ctx.fillStyle = '#ffffff'
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(label, x + padding, y + boxH / 2)
-    }
+    // White text
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, x + padding, y + boxH / 2)
 
     canvas.toBlob((outBlob) => {
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(outBlob)
-      a.download = filename || 'image'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(blobUrl)
+      if (!outBlob) {
+        // Fallback: download without text overlay
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = filename || 'image'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } else {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(outBlob)
+        a.download = filename || 'image'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(blobUrl)
+      }
     }, 'image/png')
   } catch (err) {
     console.error('Download failed:', err)

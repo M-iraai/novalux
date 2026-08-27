@@ -11,11 +11,11 @@ const r2 = new S3Client({
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, HEAD')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') return res.status(204).end()
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).json({ error: 'Method not allowed' })
 
   const { key } = req.query
   if (!key) return res.status(400).json({ error: 'key required' })
@@ -26,10 +26,17 @@ export default async function handler(req, res) {
 
     const chunks = []
     for await (const c of resp.Body) chunks.push(c)
+    const body = Buffer.concat(chunks)
 
     res.setHeader('Content-Type', ct)
+    res.setHeader('Content-Length', body.length)
     res.setHeader('Cache-Control', 'public, max-age=86400')
-    res.status(200).send(Buffer.concat(chunks))
+
+    if (req.method === 'HEAD') {
+      return res.status(200).end()
+    }
+
+    res.status(200).send(body)
   } catch (err) {
     if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
       return res.status(404).json({ error: 'Image not found' })
