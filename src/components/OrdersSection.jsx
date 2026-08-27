@@ -97,14 +97,23 @@ async function downloadImage(url, filename, sizeBytes) {
       const x = img.naturalWidth - boxW - fontSize * 0.5
       const y = img.naturalHeight - boxH - fontSize * 0.5
 
-      // Background pill
+      // Background pill (manual rounded rect for compatibility)
       ctx.fillStyle = 'rgba(0,0,0,0.65)'
+      const r = boxH / 2
       ctx.beginPath()
-      ctx.roundRect(x, y, boxW, boxH, boxH / 2)
+      ctx.moveTo(x + r, y)
+      ctx.lineTo(x + boxW - r, y)
+      ctx.arcTo(x + boxW, y, x + boxW, y + r, r)
+      ctx.arcTo(x + boxW, y + boxH, x + boxW - r, y + boxH, r)
+      ctx.lineTo(x + r, y + boxH)
+      ctx.arcTo(x, y + boxH, x, y + boxH - r, r)
+      ctx.arcTo(x, y, x + r, y, r)
+      ctx.closePath()
       ctx.fill()
 
       // Text
       ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
       ctx.fillText(label, x + padding, y + boxH / 2)
     }
