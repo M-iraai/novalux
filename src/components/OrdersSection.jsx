@@ -8,6 +8,7 @@ import BottomSheet from './BottomSheet'
 import LazyImage from './LazyImage'
 import ConfirmDialog from './ConfirmDialog'
 import { useDebounce } from '../hooks/useDebounce'
+import { compressImage } from '../utils/compressImage'
 
 // image_url in DB is the R2 key (e.g. products/123-abc.png)
 function getImageUrl(storedValue) {
@@ -53,14 +54,17 @@ function formatTime(date) {
 }
 
 async function uploadToR2(file) {
+  // Compress and convert to WebP before uploading
+  const compressed = await compressImage(file)
+
   // Upload file through Vercel serverless function (no CORS issues)
-  const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+  const res = await fetch(`/api/upload?filename=${encodeURIComponent(compressed.name)}`, {
     method: 'POST',
     headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'X-Filename': file.name,
+      'Content-Type': compressed.type || 'application/octet-stream',
+      'X-Filename': compressed.name,
     },
-    body: file,
+    body: compressed,
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Failed to upload to R2')
