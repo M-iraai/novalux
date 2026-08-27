@@ -162,7 +162,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const dayGroups = useMemo(() => allDayGroups.slice(0, showCount), [allDayGroups, showCount])
 
   // Fetch image file sizes for visible orders
-  useMemo(() => {
+  useEffect(() => {
     dayGroups.forEach(group => {
       group.orders.forEach(order => {
         if (order.image_url && !imageSizes[order.id]) {
@@ -175,7 +175,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
         }
       })
     })
-  }, [dayGroups])
+  }, [dayGroups, imageSizes])
 
   const toggleDay = (key) => {
     setOpenDays(prev => ({ ...prev, [key]: !prev[key] }))
