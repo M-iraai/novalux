@@ -9,6 +9,7 @@ import LazyImage from './LazyImage'
 import ConfirmDialog from './ConfirmDialog'
 import { useDebounce } from '../hooks/useDebounce'
 import { compressImage } from '../utils/compressImage'
+import { toPng } from 'html-to-image'
 
 // image_url in DB is the R2 key (e.g. products/123-abc.png)
 function getImageUrl(storedValue) {
@@ -70,61 +71,42 @@ async function getImageFileSize(url) {
 
 async function downloadImage(url, filename, sizeBytes) {
   try {
-    const res = await fetch(url)
-    const blob = await res.blob()
-    const blobSize = sizeBytes || blob.size
-    const blobUrl = URL.createObjectURL(blob)
+    const label = formatFileSize(sizeBytes)
 
-    const img = new Image()
-    img.src = blobUrl
-    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject })
+    // Create a hidden container with image + size badge
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:600px;'
+    container.innerHTML = `
+      <div style="position:relative;width:600px;background:#000;border-radius:12px;overflow:hidden;">
+        <img src="${url}" style="width:100%;display:block;" crossorigin="anonymous" />
+        ${label ? `
+        <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.7);color:#fff;font:bold 16px Arial,sans-serif;padding:6px 14px;border-radius:20px;">
+          ${label}
+        </div>` : ''}
+      </div>
+    `
+    document.body.appendChild(container)
 
-    const canvas = document.createElement('canvas')
-    canvas.width = img.naturalWidth
-    canvas.height = img.naturalHeight
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(img, 0, 0)
+    // Wait for image to load inside the container
+    const imgEl = container.querySelector('img')
+    await new Promise((resolve, reject) => {
+      if (imgEl.complete) resolve()
+      else { imgEl.onload = resolve; imgEl.onerror = reject }
+    })
 
-    // Draw size text on the image
-    const label = formatFileSize(blobSize)
-    const fontSize = Math.max(14, Math.round(img.naturalWidth / 25))
-    const padding = fontSize * 0.6
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`
-    const tw = ctx.measureText(label).width
-    const boxW = tw + padding * 2
-    const boxH = fontSize + padding * 2
-    const x = img.naturalWidth - boxW - fontSize * 0.5
-    const y = img.naturalHeight - boxH - fontSize * 0.5
-    const cr = boxH / 2
+    // Convert to PNG using html-to-image
+    const node = container.firstElementChild
+    const dataUrl = await toPng(node, { pixelRatio: 2 })
 
-    // Background pill (manual rounded rect)
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'
-    ctx.beginPath()
-    ctx.moveTo(x + cr, y)
-    ctx.lineTo(x + boxW - cr, y)
-    ctx.arcTo(x + boxW, y, x + boxW, y + cr, cr)
-    ctx.arcTo(x + boxW, y + boxH, x + boxW - cr, y + boxH, cr)
-    ctx.lineTo(x + cr, y + boxH)
-    ctx.arcTo(x, y + boxH, x, y + boxH - cr, cr)
-    ctx.arcTo(x, y, x + cr, y, cr)
-    ctx.closePath()
-    ctx.fill()
+    document.body.removeChild(container)
 
-    // White text
-    ctx.fillStyle = '#ffffff'
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(label, x + padding, y + boxH / 2)
-
-    // Use toDataURL (more reliable than toBlob across browsers)
-    const dataUrl = canvas.toDataURL('image/png')
+    // Trigger download
     const a = document.createElement('a')
     a.href = dataUrl
     a.download = filename || 'image.png'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    URL.revokeObjectURL(blobUrl)
   } catch (err) {
     console.error('Download failed:', err)
   }
