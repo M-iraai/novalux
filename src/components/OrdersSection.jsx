@@ -68,11 +68,15 @@ async function getImageFileSize(url) {
   } catch { return null }
 }
 
-async function downloadImage(url, filename, sizeBytes) {
+async function downloadImage(url, filename, orderSize, orderColor) {
   try {
-    const label = formatFileSize(sizeBytes)
+    // Build label from order details
+    const parts = []
+    if (orderSize) parts.push(orderSize)
+    if (orderColor) parts.push(orderColor)
+    const label = parts.join(' / ')
 
-    // Fetch image as base64 data URL (avoids CORS issues)
+    // Fetch image as blob (avoids CORS issues)
     const res = await fetch(url)
     const blob = await res.blob()
     const blobUrl = URL.createObjectURL(blob)
@@ -93,10 +97,10 @@ async function downloadImage(url, filename, sizeBytes) {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     URL.revokeObjectURL(blobUrl)
 
-    // Draw size badge
+    // Draw order size/color badge
     if (label) {
-      const fontSize = Math.max(16, Math.round(canvas.width / 20))
-      const pad = fontSize * 0.6
+      const fontSize = Math.max(16, Math.round(canvas.width / 18))
+      const pad = fontSize * 0.7
       ctx.font = `bold ${fontSize}px Arial, sans-serif`
       const tw = ctx.measureText(label).width
       const bw = tw + pad * 2
@@ -479,7 +483,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              downloadImage(getImageUrl(order.image_url), order.image_url.split('/').pop(), imageSizes[order.id])
+                              downloadImage(getImageUrl(order.image_url), order.image_url.split('/').pop(), order.size, order.color)
                             }}
                             className="absolute bottom-1 left-1 w-5 h-5 rounded-md bg-black/60 text-white grid place-items-center border-0 hover:bg-black/80 transition-colors"
                             title="تحميل الصورة"
