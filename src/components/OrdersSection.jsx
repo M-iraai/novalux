@@ -9,7 +9,6 @@ import LazyImage from './LazyImage'
 import ConfirmDialog from './ConfirmDialog'
 import { useDebounce } from '../hooks/useDebounce'
 import { compressImage } from '../utils/compressImage'
-import { toPng } from 'html-to-image'
 
 // image_url in DB is the R2 key (e.g. products/123-abc.png)
 function getImageUrl(storedValue) {
@@ -73,34 +72,61 @@ async function downloadImage(url, filename, sizeBytes) {
   try {
     const label = formatFileSize(sizeBytes)
 
-    // Create a hidden container with image + size badge
-    const container = document.createElement('div')
-    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:600px;'
-    container.innerHTML = `
-      <div style="position:relative;width:600px;background:#000;border-radius:12px;overflow:hidden;">
-        <img src="${url}" style="width:100%;display:block;" />
-        ${label ? `
-        <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.7);color:#fff;font:bold 16px Arial,sans-serif;padding:6px 14px;border-radius:20px;">
-          ${label}
-        </div>` : ''}
-      </div>
-    `
-    document.body.appendChild(container)
+    // Fetch image as base64 data URL (avoids CORS issues)
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
 
-    // Wait for image to load inside the container
-    const imgEl = container.querySelector('img')
+    // Load into an Image element
+    const img = new Image()
+    img.src = blobUrl
     await new Promise((resolve, reject) => {
-      if (imgEl.complete) resolve()
-      else { imgEl.onload = resolve; imgEl.onerror = reject }
+      img.onload = resolve
+      img.onerror = () => reject(new Error('Image failed to load'))
     })
 
-    // Convert to PNG using html-to-image
-    const node = container.firstElementChild
-    const dataUrl = await toPng(node, { pixelRatio: 2 })
+    // Draw on canvas
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth || 600
+    canvas.height = img.naturalHeight || 600
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    URL.revokeObjectURL(blobUrl)
 
-    document.body.removeChild(container)
+    // Draw size badge
+    if (label) {
+      const fontSize = Math.max(16, Math.round(canvas.width / 20))
+      const pad = fontSize * 0.6
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`
+      const tw = ctx.measureText(label).width
+      const bw = tw + pad * 2
+      const bh = fontSize + pad * 2
+      const bx = canvas.width - bw - pad
+      const by = canvas.height - bh - pad
+      const cr = bh / 2
 
-    // Trigger download
+      // Pill background
+      ctx.fillStyle = 'rgba(0,0,0,0.75)'
+      ctx.beginPath()
+      ctx.moveTo(bx + cr, by)
+      ctx.lineTo(bx + bw - cr, by)
+      ctx.arcTo(bx + bw, by, bx + bw, by + cr, cr)
+      ctx.arcTo(bx + bw, by + bh, bx + bw - cr, by + bh, cr)
+      ctx.lineTo(bx + cr, by + bh)
+      ctx.arcTo(bx, by + bh, bx, by + bh - cr, cr)
+      ctx.arcTo(bx, by, bx + cr, by, cr)
+      ctx.closePath()
+      ctx.fill()
+
+      // Text
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label, bx + pad, by + bh / 2)
+    }
+
+    // Export as data URL and trigger download
+    const dataUrl = canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = dataUrl
     a.download = filename || 'image.png'
@@ -108,8 +134,8 @@ async function downloadImage(url, filename, sizeBytes) {
     a.click()
     document.body.removeChild(a)
   } catch (err) {
-    console.error('Download failed, trying direct download:', err)
-    // Fallback: download original image without overlay
+    console.error('Download with text failed, downloading original:', err)
+    // Fallback: download original without text
     try {
       const res = await fetch(url)
       const blob = await res.blob()
