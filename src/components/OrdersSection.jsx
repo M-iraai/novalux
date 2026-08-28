@@ -78,7 +78,7 @@ async function downloadImage(url, filename, sizeBytes) {
     container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:600px;'
     container.innerHTML = `
       <div style="position:relative;width:600px;background:#000;border-radius:12px;overflow:hidden;">
-        <img src="${url}" style="width:100%;display:block;" crossorigin="anonymous" />
+        <img src="${url}" style="width:100%;display:block;" />
         ${label ? `
         <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.7);color:#fff;font:bold 16px Arial,sans-serif;padding:6px 14px;border-radius:20px;">
           ${label}
@@ -108,7 +108,20 @@ async function downloadImage(url, filename, sizeBytes) {
     a.click()
     document.body.removeChild(a)
   } catch (err) {
-    console.error('Download failed:', err)
+    console.error('Download failed, trying direct download:', err)
+    // Fallback: download original image without overlay
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename || 'image.png'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (e2) {
+      console.error('Fallback download also failed:', e2)
+    }
   }
 }
 
