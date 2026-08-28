@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   ChevronDown, Trash2, Plus, Search,
@@ -53,20 +53,6 @@ function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatFileSize(bytes) {
-  if (bytes == null) return null
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-async function getImageFileSize(url) {
-  try {
-    const res = await fetch(url, { method: 'HEAD' })
-    const len = res.headers.get('content-length')
-    return len ? parseInt(len, 10) : null
-  } catch { return null }
-}
 
 async function downloadImage(url, filename, orderSize, orderColor) {
   try {
@@ -105,8 +91,8 @@ async function downloadImage(url, filename, orderSize, orderColor) {
       const tw = ctx.measureText(label).width
       const bw = tw + pad * 2
       const bh = fontSize + pad * 2
-      const bx = canvas.width - bw - pad
-      const by = canvas.height - bh - pad
+      const bx = (canvas.width - bw) / 2
+      const by = (canvas.height - bh) / 2
       const cr = bh / 2
 
       // Pill background
@@ -216,7 +202,6 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const [showCount, setShowCount] = useState(20)
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', confirmText: 'حذف', onConfirm: null })
   const [deleting, setDeleting] = useState(false)
-  const [imageSizes, setImageSizes] = useState({})
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   const filteredOrders = useMemo(() => {
@@ -231,21 +216,6 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const allDayGroups = useMemo(() => groupOrdersByDay(filteredOrders), [filteredOrders])
   const dayGroups = useMemo(() => allDayGroups.slice(0, showCount), [allDayGroups, showCount])
 
-  // Fetch image file sizes for visible orders
-  useEffect(() => {
-    dayGroups.forEach(group => {
-      group.orders.forEach(order => {
-        if (order.image_url && !imageSizes[order.id]) {
-          const url = getImageUrl(order.image_url)
-          if (url && !url.startsWith('blob:')) {
-            getImageFileSize(url).then(size => {
-              if (size != null) setImageSizes(prev => ({ ...prev, [order.id]: size }))
-            })
-          }
-        }
-      })
-    })
-  }, [dayGroups, imageSizes])
 
   const toggleDay = (key) => {
     setOpenDays(prev => ({ ...prev, [key]: !prev[key] }))
@@ -491,11 +461,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                             <Download size={11} />
                           </button>
                         )}
-                        {order.image_url && imageSizes[order.id] != null && (
-                          <span className="absolute top-1 left-1 bg-black/60 text-white text-[8px] font-bold px-1 py-0.5 rounded leading-none">
-                            {formatFileSize(imageSizes[order.id])}
-                          </span>
-                        )}
+
                       </div>
 
                       {/* Info */}
