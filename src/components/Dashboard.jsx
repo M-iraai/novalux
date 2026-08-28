@@ -51,22 +51,7 @@ export default function Dashboard({ session, onLogout }) {
               totalOrders={orders.length}
             />
 
-            {/* Recent Orders */}
-            <div className="flex items-center justify-between mt-1 mb-3.5 mx-0.5">
-              <h2 className="text-2xl font-extrabold m-0">آخر الطلبات</h2>
-              <button
-                className="border-0 bg-none text-purple font-semibold text-[15px]"
-                onClick={() => setActiveTab('orders')}
-              >
-                عرض الكل
-              </button>
-            </div>
-            <OrdersSection
-              orders={orders.slice(0, 8)}
-              compact
-              onRefresh={fetchOrders}
-              showToast={showToast}
-            />
+
           </>
         )}
 

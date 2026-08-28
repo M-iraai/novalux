@@ -68,17 +68,35 @@ async function downloadImage(url, filename, orderSize, orderColor) {
       img.onerror = () => reject(new Error('Image failed to load'))
     })
 
-    // Draw on canvas
+    // Draw on canvas — fixed 1200x1200 so text is always the same size
     const canvas = document.createElement('canvas')
-    canvas.width = img.naturalWidth || 600
-    canvas.height = img.naturalHeight || 600
+    canvas.width = 1200
+    canvas.height = 1200
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    // Draw image centered & cover-fitted
+    const imgW = img.naturalWidth || 600
+    const imgH = img.naturalHeight || 600
+    const canvasAspect = 1200 / 1200
+    const imgAspect = imgW / imgH
+    let drawW, drawH, drawX, drawY
+    if (imgAspect > canvasAspect) {
+      drawH = 1200
+      drawW = imgAspect * 1200
+      drawX = (1200 - drawW) / 2
+      drawY = 0
+    } else {
+      drawW = 1200
+      drawH = 1200 / imgAspect
+      drawX = 0
+      drawY = (1200 - drawH) / 2
+    }
+    ctx.drawImage(img, drawX, drawY, drawW, drawH)
     URL.revokeObjectURL(blobUrl)
 
     // Draw order size/color badge
     if (label) {
-      const fontSize = Math.max(24, Math.round(canvas.width / 12))
+      const fontSize = 44
       const pad = fontSize * 0.7
       ctx.font = `bold ${fontSize}px Arial, sans-serif`
       const tw = ctx.measureText(label).width
@@ -195,16 +213,23 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   const [showCount, setShowCount] = useState(20)
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', confirmText: 'حذف', onConfirm: null })
   const [deleting, setDeleting] = useState(false)
+  const [confirming, setConfirming] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   const filteredOrders = useMemo(() => {
-    if (!debouncedSearch.trim()) return orders
-    const q = debouncedSearch.toLowerCase()
-    return orders.filter(o =>
-      o.customer_name?.toLowerCase().includes(q) ||
-      o.phone?.includes(q)
-    )
-  }, [orders, debouncedSearch])
+    let result = orders
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase()
+      result = result.filter(o =>
+        o.customer_name?.toLowerCase().includes(q) ||
+        o.phone?.includes(q)
+      )
+    }
+    if (statusFilter === 'confirmed') result = result.filter(o => o.confirmed)
+    if (statusFilter === 'unconfirmed') result = result.filter(o => !o.confirmed)
+    return result
+  }, [orders, debouncedSearch, statusFilter])
 
   const allDayGroups = useMemo(() => groupOrdersByDay(filteredOrders), [filteredOrders])
   const dayGroups = useMemo(() => allDayGroups.slice(0, showCount), [allDayGroups, showCount])
@@ -354,6 +379,47 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
     })
   }
 
+  const handleConfirmOrder = async (order) => {
+    // If order is confirmed, show confirmation dialog before unconfirming
+    if (order.confirmed) {
+      setConfirmDialog({
+        open: true,
+        title: 'إلغاء تأكيد الطلب',
+        message: `هل تريد إلغاء تأكيد طلب "${order.customer_name}"؟`,
+        confirmText: 'إلغاء التأكيد',
+        onConfirm: async () => {
+          setConfirming(order.id)
+          const { error } = await supabase
+            .from('orders')
+            .update({ confirmed: false })
+            .eq('id', order.id)
+          setConfirming(null)
+          setConfirmDialog(prev => ({ ...prev, open: false }))
+          if (!error) {
+            showToast('تم إلغاء تأكيد الطلب')
+            onRefresh()
+          } else {
+            showToast('خطأ في تغيير حالة الطلب')
+          }
+        },
+      })
+    } else {
+      // If not confirmed, confirm immediately
+      setConfirming(order.id)
+      const { error } = await supabase
+        .from('orders')
+        .update({ confirmed: true })
+        .eq('id', order.id)
+      setConfirming(null)
+      if (!error) {
+        showToast('تم تأكيد الطلب بنجاح')
+        onRefresh()
+      } else {
+        showToast('خطأ في تغيير حالة الطلب')
+      }
+    }
+  }
+
   return (
     <div>
       {/* Add button */}
@@ -369,7 +435,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
 
       {/* Search */}
       {full && (
-        <div className="relative mb-4">
+        <div className="relative mb-3">
           <input
             type="text"
             placeholder="ابحث عن اسم أو رقم هاتف..."
@@ -378,6 +444,29 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
             className="w-full h-12 border border-border rounded-xl px-4 pl-10 outline-none focus:border-purple focus:ring-2 focus:ring-purple/10 transition-all text-sm bg-white"
           />
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+        </div>
+      )}
+
+      {/* Status Filter */}
+      {full && (
+        <div className="flex gap-2 mb-4">
+          {[
+            { id: 'all', label: 'الكل' },
+            { id: 'unconfirmed', label: 'غير مؤكد' },
+            { id: 'confirmed', label: 'مؤكد' },
+          ].map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              className={`h-8 px-4 rounded-full border text-xs font-bold transition-all ${
+                statusFilter === f.id
+                  ? 'bg-purple text-white border-purple shadow-sm'
+                  : 'bg-white text-muted border-border hover:border-purple/40'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -424,7 +513,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                 {group.orders.map((order) => (
                   <div
                     key={order.id}
-                    className="bg-white border border-border rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow"
+                    className={`${order.confirmed ? 'bg-green-50/60 border-green-200' : 'bg-white border-border'} border rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow`}
                   >
                     <div className="flex gap-3">
                       {/* Image with download */}
@@ -454,10 +543,30 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
                       </div>
 
                       {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-sm text-ink truncate m-0">{order.customer_name}</h4>
-                          <div className="flex gap-1 shrink-0" dir="ltr">
+                      <div className="flex-1 min-w-0">                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h4 className="font-bold text-sm text-ink truncate m-0">{order.customer_name}</h4>
+                          </div>
+                          <div className="flex gap-1.5 items-center shrink-0" dir="ltr">
+                            {/* Confirm Toggle Button */}
+                            <button
+                              onClick={() => handleConfirmOrder(order)}
+                              disabled={confirming === order.id}
+                              className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-200 disabled:opacity-50 ${
+                                order.confirmed
+                                  ? 'bg-green-500 border-green-500 text-white'
+                                  : 'bg-white border-gray-300 text-gray-300 hover:border-green-400 hover:text-green-400'
+                              }`}
+                              title={order.confirmed ? 'إلغاء تأكيد الطلب' : 'تأكيد الطلب'}
+                            >
+                              {confirming === order.id ? (
+                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
                             {full && (
                               <button
                                 onClick={() => openEditOrder(order)}
@@ -662,7 +771,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
         title={confirmDialog.title}
         message={confirmDialog.message}
         confirmText={confirmDialog.confirmText}
-        loading={deleting}
+        loading={deleting || confirming}
       />
     </div>
   )
