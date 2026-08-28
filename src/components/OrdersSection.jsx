@@ -96,7 +96,7 @@ async function downloadImage(url, filename, orderSize, orderColor) {
 
     // Draw order size/color badge
     if (label) {
-      const fontSize = 56
+      const fontSize = 68
       const pad = fontSize * 0.7
       ctx.font = `${fontSize}px Arial, sans-serif`
       const tw = ctx.measureText(label).width

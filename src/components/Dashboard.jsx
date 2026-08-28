@@ -49,6 +49,8 @@ export default function Dashboard({ session, onLogout }) {
             <div className="text-[15px] text-subtle2 mb-6">إدارة طلباتك بسهولة.</div>
             <StatsCards
               totalOrders={orders.length}
+              confirmedOrders={orders.filter(o => o.confirmed).length}
+              unconfirmedOrders={orders.filter(o => !o.confirmed).length}
             />
 
 
