@@ -41,10 +41,6 @@ function getDayLabel(date) {
   return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-function isOlderThan7Days(date) {
-  return (new Date() - new Date(date)) >= 7 * 24 * 60 * 60 * 1000
-}
-
 function formatDateFull(date) {
   return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
 }
@@ -56,11 +52,8 @@ function formatTime(date) {
 
 async function downloadImage(url, filename, orderSize, orderColor) {
   try {
-    // Build label from order details
-    const parts = []
-    if (orderSize) parts.push(orderSize)
-    if (orderColor) parts.push(orderColor)
-    const label = parts.join(' / ')
+    // Build label from order size only
+    const label = orderSize || ''
 
     // Fetch image as blob (avoids CORS issues)
     const res = await fetch(url)
@@ -344,10 +337,6 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
   }
 
   const handleDeleteDay = (dayDate, ordersList) => {
-    if (!isOlderThan7Days(dayDate)) {
-      showToast('يمكنك حذف الطلبات التي مضى عليها 7 أيام فقط')
-      return
-    }
     setConfirmDialog({
       open: true,
       title: `حذف طلبات ${getDayLabel(dayDate)}`,
@@ -396,7 +385,7 @@ export default function OrdersSection({ orders, compact, full, onRefresh, showTo
       {dayGroups.map((group) => {
         const dayKey = group.date.toDateString()
         const isOpen = openDays[dayKey] !== false
-        const canDelete = isOlderThan7Days(group.date)
+        const canDelete = true
         const dayLabel = getDayLabel(group.date)
         const dateStr = formatDateFull(group.date)
 
