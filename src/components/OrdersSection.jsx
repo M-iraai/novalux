@@ -19,26 +19,42 @@ function getImageUrl(storedValue) {
   return `/api/image?key=${encodeURIComponent(storedValue)}`
 }
 
+const DAY_BOUNDARY_HOUR = 15 // day splits at 3 PM
+
+// Returns the calendar date of the 3PM→3PM business day's END.
+// e.g. an order at 10 AM Sep 1 belongs to the business day ending Sep 1,
+// and an order at 4 PM Sep 1 belongs to the business day ending Sep 2.
+function getBusinessDayDate(date) {
+  const shifted = new Date(date.getTime() - DAY_BOUNDARY_HOUR * 60 * 60 * 1000)
+  const end = new Date(shifted.getFullYear(), shifted.getMonth(), shifted.getDate() + 1)
+  return end
+}
+
+function getBusinessDayKey(date) {
+  return getBusinessDayDate(date).toDateString()
+}
+
 function groupOrdersByDay(orders) {
   const groups = {}
   orders.forEach(order => {
     const d = new Date(order.created_at)
-    const key = d.toDateString()
-    if (!groups[key]) groups[key] = { date: d, orders: [] }
+    const key = getBusinessDayKey(d)
+    if (!groups[key]) groups[key] = { date: getBusinessDayDate(d), orders: [] }
     groups[key].orders.push(order)
   })
   return Object.values(groups).sort((a, b) => b.date - a.date)
 }
 
 function getDayLabel(date) {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.floor((today - target) / (1000 * 60 * 60 * 24))
-  if (diffDays === 0) return 'اليوم'
+  const todayKey = getBusinessDayKey(new Date())
+  const targetKey = getBusinessDayKey(date)
+  if (todayKey === targetKey) return 'اليوم'
+  const todayDate = getBusinessDayDate(new Date())
+  const targetDate = getBusinessDayDate(date)
+  const diffDays = Math.round((todayDate - targetDate) / (1000 * 60 * 60 * 24))
   if (diffDays === 1) return 'أمس'
-  if (diffDays < 7) return `منذ ${diffDays} أيام`
-  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
+  if (diffDays > 1 && diffDays < 7) return `منذ ${diffDays} أيام`
+  return targetDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function formatDateFull(date) {
